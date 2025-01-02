@@ -1,0 +1,1199 @@
+/********************************************
+*
+*  Cave Explorer
+*
+*  Discover the secrets of a mysterious
+*  tunnel system. A fairly elaborate
+*  Chip8 adventure game ported to C.
+*
+*  On the overworld, press ASWD to move.
+*  In platformer levels, A/D move,
+*  E picks up/sets down blocks,
+*  Q resets the level.
+*
+********************************************/
+
+// #define DEBUG_SKIPINTRO   // Uncomment to skip the intro and title screen
+// #define DEBUG_FINALPUZZLE // Uncomment to make final puzzle accessable at the beginning
+
+#include "chip8_platform.h" // Used to simulate Chip8 environment
+
+static uint8_t font[] = { // Text block
+  0x20, 0x20, 0x20, 0x00, 0x20, 0xF0, 0x10, 0x70, 0x00, 0x40, 0xE0, 0x90, 0xE0, 0x90, 0x90, 0x90,
+  0xE0, 0x90, 0xE0, 0x90, 0xE0, 0x80, 0x80, 0xD0, 0xB0, 0xB0, 0x90, 0x90, 0x90, 0x90, 0x60, 0x60,
+  0x90, 0x90, 0x90, 0x60, 0x90, 0xD0, 0xB0, 0x90, 0x90, 0x90, 0x50, 0x20, 0x40, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x60, 0x90, 0xF0, 0x90, 0x90, 0xF0, 0x90, 0x90, 0xF0, 0x80, 0xE0, 0x80, 0x80, 0x80,
+  0x80, 0xF0, 0x80, 0xE0, 0x80, 0xF0, 0x40, 0x40, 0x40, 0xF0, 0x20, 0x40, 0x80, 0xF0, 0x20, 0x20,
+  0x20, 0xC0, 0x60, 0x90, 0x80, 0x90, 0x60, 0x90, 0x90, 0xB0, 0x70, 0x80, 0xB0, 0x90, 0x70, 0x80,
+  0x60, 0x10, 0xE0, 0x90, 0xA0, 0xC0, 0xA0, 0x90, 0x90, 0xB0, 0xB0, 0xD0, 0xF0, 0x40, 0x40, 0x40,
+  0x40, 0x90, 0x90, 0x70, 0x10, 0xE0
+};
+
+#define special_complete title1 // Flag buffer to save completed special events
+static uint8_t title1[] = { // Intro conversation image
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0xE0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x08, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x20, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x28, 0x21, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x40, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x01, 0x00, 0x00, 0x00, 0x00, 0x0F, 0xC0,
+  0x4F, 0x81, 0x00, 0x00, 0x00, 0x00, 0x10, 0x30, 0x46, 0x01, 0x00, 0x00, 0x00, 0x00, 0x20, 0x08,
+  0x20, 0x02, 0x00, 0x00, 0x00, 0x00, 0x30, 0xE8, 0x20, 0x02, 0x00, 0x00, 0x00, 0x00, 0x4F, 0x04,
+  0x10, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x50, 0x84, 0x1F, 0xF6, 0x00, 0x00, 0x00, 0x00, 0x40, 0x04,
+  0x77, 0x09, 0x00, 0x00, 0x00, 0x00, 0x4F, 0x84, 0x97, 0x90, 0xC0, 0x00, 0x00, 0x00, 0x50, 0x4C,
+  0x0E, 0xE0, 0x20, 0x00, 0x00, 0x00, 0x20, 0x1E, 0x0C, 0x00, 0x10, 0x00, 0x00, 0x00, 0x7F, 0xFF
+};
+
+static uint8_t phrase1[] = { // "READY FOR SCHOOL?"
+  0x0A, 0x41, 0x32, 0x0C, 0x71, 0x2D, 0x3A, 0x1F, 0x0A, 0x2D, 0x2D, 0x2D, 0x5E, 0x52, 0x35, 0x1F,
+  0x1F, 0x3D, 0x05
+};
+
+static uint8_t phrase2[] = { // "         NO!"
+  0x2D, 0x2D, 0x2D, 0x2D, 0x2D, 0x2D, 0x2D, 0x2D, 0x2D, 0x24, 0x1F, 0x00
+};
+
+static uint8_t phrase3[] = { // "HOW ABOUT    "
+  0x35, 0x1F, 0x67, 0x2D, 0x32, 0x10, 0x1F, 0x1A, 0x6C, 0x2D, 0x2D, 0x2D, 0x2D
+};
+
+#define level_buffer title2 // Buffer to hold current level
+static uint8_t title2[] = { // "Cave Explorer" Logo
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x70, 0x00, 0x00,
+  0x00, 0x3E, 0x00, 0x70, 0x3C, 0x8C, 0x7F, 0x00, 0x01, 0xC1, 0x81, 0x88, 0x42, 0x84, 0x80, 0xE0,
+  0x02, 0x00, 0x42, 0x04, 0x42, 0x84, 0x80, 0x10, 0x04, 0x00, 0x44, 0x02, 0x21, 0x04, 0x80, 0x10,
+  0x08, 0x00, 0x44, 0x01, 0x21, 0x05, 0x00, 0x10, 0x10, 0x03, 0x88, 0x01, 0x10, 0x05, 0x07, 0x10,
+  0x14, 0x07, 0x08, 0x00, 0x90, 0x45, 0x0F, 0xD0, 0x10, 0x0C, 0x08, 0x60, 0x90, 0x09, 0x06, 0x70,
+  0x20, 0x18, 0x08, 0x70, 0x90, 0x09, 0x01, 0xA0, 0x20, 0x18, 0x10, 0xB0, 0x54, 0x19, 0x00, 0x80,
+  0x28, 0x10, 0x10, 0x90, 0x4C, 0x1A, 0x07, 0x00, 0x20, 0x10, 0xD0, 0xF0, 0xA8, 0x32, 0x46, 0x60,
+  0x20, 0x0F, 0x58, 0x00, 0x28, 0xB2, 0x03, 0x90, 0x29, 0x20, 0xD1, 0x00, 0x24, 0x33, 0x00, 0x10,
+  0x30, 0x09, 0xD4, 0x72, 0x17, 0x73, 0x40, 0x10, 0x14, 0x43, 0x98, 0xF8, 0xB6, 0x63, 0x02, 0x10,
+  0x1A, 0xA7, 0x1B, 0x9A, 0x33, 0x61, 0xD0, 0x30, 0x0D, 0x1E, 0x1F, 0x8D, 0x63, 0xC1, 0xFA, 0xD0,
+  0x0F, 0xFC, 0x0D, 0x07, 0xE1, 0x81, 0xFF, 0x70, 0x04, 0x60, 0x00, 0x02, 0xC0, 0x00, 0x8C, 0x20,
+  0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0xFB, 0x37, 0x98, 0x73, 0xCF, 0xBC, 0x00, 0x00, 0xFB, 0xF7, 0xD8, 0xFB, 0xEF, 0xBE, 0x00,
+  0x00, 0xC1, 0xE6, 0xD8, 0xDB, 0x6C, 0x36, 0x00, 0x00, 0xF0, 0xC7, 0xD8, 0xDB, 0xEF, 0x3E, 0x00,
+  0x00, 0xC1, 0xE7, 0x98, 0xDB, 0xCC, 0x3C, 0x00, 0x00, 0xFB, 0xF6, 0x1E, 0xFB, 0x6F, 0xB6, 0x00,
+  0x00, 0xFB, 0x36, 0x1E, 0x73, 0x6F, 0xB6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+static uint8_t bus[] = { // "The End" image
+  0x00, 0x04, 0x00, 0x3D, 0x97, 0xFF, 0xFF, 0xFF, 0xFF, 0xFD, 0xFF, 0x9D, 0x4B, 0xFF, 0x8B, 0x47,
+  0x20, 0x04, 0x00, 0x5D, 0xCB, 0xFF, 0xD8, 0x4F, 0x26, 0x04, 0x00, 0x1D, 0x05, 0xFF, 0xDB, 0x5F,
+  0x21, 0x04, 0x00, 0x1D, 0x85, 0xFF, 0xDB, 0x47, 0x20, 0x84, 0x7C, 0x1C, 0x05, 0xFF, 0xFF, 0xFF,
+  0x20, 0x84, 0xDA, 0x5D, 0xC5, 0xFF, 0x8B, 0x47, 0x20, 0x94, 0xBC, 0xDD, 0xE5, 0xFF, 0x99, 0x5B,
+  0x20, 0xB4, 0xE6, 0x1D, 0xE6, 0x1F, 0xBA, 0x5B, 0x20, 0x94, 0xC2, 0xDD, 0xCF, 0xE7, 0x8B, 0x47,
+  0x20, 0x85, 0x7D, 0xDC, 0x3F, 0xF9, 0xFF, 0xFF, 0x2F, 0xF5, 0x83, 0x9F, 0xFF, 0xFE, 0xFF, 0xFF,
+  0x20, 0x05, 0xFF, 0x1F, 0xFF, 0xFF, 0x7F, 0xFF, 0xFF, 0xFC, 0xFE, 0x1F, 0xFF, 0xF3, 0xBF, 0x07,
+  0xFF, 0xFC, 0xFE, 0x1F, 0xFF, 0xED, 0xDE, 0xFB, 0xA2, 0x2D, 0xF8, 0x0C, 0x07, 0xDD, 0xED, 0xFD,
+  0x2A, 0xA8, 0x07, 0xF7, 0xF9, 0xD9, 0xE3, 0x7E, 0xAA, 0xAB, 0xFF, 0xEC, 0x1E, 0xD6, 0xF3, 0xFE,
+  0xA2, 0x25, 0xF8, 0x00, 0x06, 0xE7, 0x1B, 0xFE, 0xFF, 0xFA, 0x07, 0xF8, 0x03, 0x77, 0xC0, 0x7E,
+  0x00, 0x0B, 0xBF, 0xFE, 0x03, 0x7B, 0xF8, 0xFC, 0xFF, 0xFB, 0x9F, 0xFF, 0x81, 0x7C, 0xED, 0xF8,
+  0x00, 0x0B, 0xBF, 0xFF, 0x81, 0x7F, 0x0E, 0x00, 0xFF, 0xFB, 0xAF, 0xF0, 0x61, 0x7F, 0xEE, 0x60,
+  0xFF, 0xFB, 0xBA, 0x3F, 0xF9, 0x7F, 0xDC, 0x98, 0xFF, 0xFD, 0xBD, 0xFF, 0xFE, 0x3F, 0xDC, 0xF8,
+  0xFF, 0xFD, 0xBC, 0xFF, 0xFF, 0xCF, 0xDC, 0xFC, 0x00, 0x01, 0xBD, 0x7F, 0xFF, 0xF1, 0xBC, 0xFC,
+  0xFF, 0xFD, 0xBD, 0xBF, 0x00, 0x0E, 0x3C, 0xDC, 0x00, 0x01, 0x1D, 0xC8, 0xFF, 0xFF, 0x8F, 0xDE,
+  0x00, 0x00, 0x1D, 0xF3, 0xFF, 0xFF, 0xF3, 0xBE, 0x00, 0x00, 0x04, 0xFB, 0xFF, 0xFF, 0xFC, 0x7C
+};
+
+static uint8_t mouth = 0xF8; // Intro conversation mouth sprite
+
+static uint8_t rumbletext[] = { // "YOU HEAR    A RUMBLE IN THE DISTANCE"
+  0x71, 0x1F, 0x1A, 0x2D, 0x35, 0x41, 0x32, 0x0A, 0x2D, 0x2D, 0x2D, 0x2D, 0x32, 0x2D, 0x0A, 0x1A,
+  0x17, 0x10, 0x3D, 0x41, 0x2D, 0x45, 0x24, 0x2D, 0x6C, 0x35, 0x41, 0x2D, 0x0C, 0x45, 0x5E, 0x6C,
+  0x32, 0x24, 0x52, 0x41
+};
+
+static uint8_t uselesstext[] = { // "JUST A BUNCHOF GOLD? HOWUSELESS!"
+  0x4D, 0x1A, 0x5E, 0x6C, 0x2D, 0x32, 0x2D, 0x10, 0x1A, 0x24, 0x52, 0x35, 0x1F, 0x3A, 0x2D, 0x5A,
+  0x1F, 0x3D, 0x0C, 0x05, 0x2D, 0x35, 0x1F, 0x67, 0x1A, 0x5E, 0x41, 0x3D, 0x41, 0x5E, 0x5E, 0x00,
+};
+
+static uint8_t exittext[] = { // "CLIMBING OUTYOU EMERGE  TO DAZZLING SUNLIGHT"
+  0x52, 0x3D, 0x45, 0x17, 0x10, 0x45, 0x24, 0x5A, 0x2D, 0x1F, 0x1A, 0x6C, 0x71, 0x1F, 0x1A, 0x2D,
+  0x41, 0x17, 0x41, 0x0A, 0x5A, 0x41, 0x2D, 0x2D, 0x6C, 0x1F, 0x2D, 0x0C, 0x32, 0x49, 0x49, 0x3D,
+  0x45, 0x24, 0x5A, 0x2D, 0x5E, 0x1A, 0x24, 0x3D, 0x45, 0x5A, 0x35, 0x6C
+};
+
+static uint8_t pyramidtext[] = { // "A VISION OF A PYRAMID? ASECRET WALL?"
+  0x32, 0x2D, 0x27, 0x45, 0x5E, 0x45, 0x1F, 0x24, 0x2D, 0x1F, 0x3A, 0x2D, 0x32, 0x2D, 0x12, 0x71,
+  0x0A, 0x32, 0x17, 0x45, 0x0C, 0x05, 0x2D, 0x32, 0x5E, 0x41, 0x52, 0x0A, 0x41, 0x6C, 0x2D, 0x67,
+  0x32, 0x3D, 0x3D, 0x05
+};
+
+static uint8_t skulltext[] = { // "SOMEONE LEFTTHEIR SKULL HERE? GROSS!"
+  0x5E, 0x1F, 0x17, 0x41, 0x1F, 0x24, 0x41, 0x2D, 0x3D, 0x41, 0x3A, 0x6C, 0x6C, 0x35, 0x41, 0x45,
+  0x0A, 0x2D, 0x5E, 0x63, 0x1A, 0x3D, 0x3D, 0x2D, 0x35, 0x41, 0x0A, 0x41, 0x05, 0x2D, 0x5A, 0x0A,
+  0x1F, 0x5E, 0x5E, 0x00
+};
+
+static uint8_t puzzlestext[] = { // "YOU MUST    RETURN TO   WHERE THIS  ALL BEGAN"
+  0x71, 0x1F, 0x1A, 0x2D, 0x17, 0x1A, 0x5E, 0x6C, 0x2D, 0x2D, 0x2D, 0x2D, 0x0A, 0x41, 0x6C, 0x1A,
+  0x0A, 0x24, 0x2D, 0x6C, 0x1F, 0x2D, 0x2D, 0x2D, 0x67, 0x35, 0x41, 0x0A, 0x41, 0x2D, 0x6C, 0x35,
+  0x45, 0x5E, 0x2D, 0x2D, 0x32, 0x3D, 0x3D, 0x2D, 0x10, 0x41, 0x5A, 0x32, 0x24
+};
+
+static uint8_t deadendtext[] = { // "A DEAD END? NUTS!"
+  0x32, 0x2D, 0x0C, 0x41, 0x32, 0x0C, 0x2D, 0x41, 0x24, 0x0C, 0x05, 0x2D, 0x24, 0x1A, 0x6C, 0x5E, 0x00
+};
+
+static uint8_t mazetext[] = { // "SNWEW"
+  0x5E, 0x24, 0x67, 0x41, 0x67
+};
+
+
+// Draw fullscreen image - used for intro, title and game completion screens
+void draw_bitmap(uint8_t* bitmap) {
+  Platform_ClearDisplay();
+
+  uint8_t x = 0;
+  uint8_t y = 0;
+
+  do {
+    Platform_SetIndex(bitmap);
+    Platform_DrawSprite(x, y, 1);
+    bitmap += 1;
+    x += 8;
+    if (x == 64) {
+      y++;
+      x = 0;
+    }
+  } while (y != 32);
+}
+
+
+// Draw text to the screen scrolling from the top left to the bottom right
+void draw_text(uint8_t* text_addr, uint8_t length) {
+  uint8_t x = 2;
+  uint8_t y = 1;
+  uint8_t byte = 0;
+
+  do {
+    uint8_t letter = text_addr[byte];
+    Platform_SetIndex(&font[letter]);
+    Platform_DrawSprite(x, y, 5);
+    x += 5;
+    if (x == 62) {
+      y += 6;
+      x = 2;
+    }
+    byte++;
+  } while (byte != length);
+}
+
+
+// Wait for 128 frames
+void wait_delay() {
+  Platform_SetDelay(128);
+  Platform_WaitForDelayValue(0);
+}
+
+
+// Swap the two characters' mouths in the intro conversation
+void swapmouth() {
+  Platform_SetIndex(&mouth);
+  Platform_DrawSprite(4, 22, 1);
+  Platform_DrawSprite(52, 29, 1);
+}
+
+
+// Draw "READY FOR SCHOOL?" in intro
+void draw_phase_1() {
+  draw_text(phrase1, 19);
+}
+
+
+// Draw "NO!" in intro
+void draw_phase_2() {
+  draw_text(phrase2, 12);
+}
+
+
+// Draw "HOW ABOUT" in intro
+void draw_phase_3() {
+  draw_text(phrase3, 13);
+}
+
+
+/*******************************************
+*
+*  Block pushing puzzle
+*
+*******************************************/
+
+// Block pusher tile sprites
+static uint8_t solid_tile[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+static uint8_t empty_tile[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+static uint8_t floor_tile[] = { 0x00, 0xFE, 0x55, 0x22, 0x88, 0x00, 0x00, 0x00 };
+static uint8_t roof_tile[]  = { 0x00, 0x00, 0x00, 0x11, 0x91, 0x8B, 0x8F, 0xDF };
+static uint8_t exit_tile[]  = { 0xC3, 0xBD, 0xBD, 0xBD, 0xB9, 0xB9, 0xBD, 0xBD };
+static uint8_t block_tile[] = { 0x81, 0x7E, 0x5A, 0x7E, 0x7E, 0x5A, 0x7E, 0x81 };
+// Block pusher Player sprites
+static uint8_t left_tile[]  = { 0xE7, 0xE7, 0xC3, 0x81, 0x82, 0x42, 0xDB, 0x93 };
+static uint8_t right_tile[] = { 0xE7, 0xE7, 0xC3, 0x81, 0x41, 0x42, 0xDB, 0xC9 };
+
+// Block pusher tile enumeration
+#define SOLID    0
+#define EMPTY    1
+#define FLOOR    2
+#define ROOF     3
+#define EXIT     4
+#define BLOCK    5
+#define PLAYER_L 6
+#define PLAYER_R 7
+
+// Block pusher variables
+static uint8_t levelNo;
+static uint8_t playerX;
+static uint8_t playerY;
+static uint8_t input;
+static uint8_t direction;
+static uint8_t win;
+
+// Block pusher player facing directions
+#define FACING_LEFT  0
+#define FACING_RIGHT 1
+
+// Block pusher controls key values
+#define MOVE_LT 7
+#define MOVE_RT 9
+#define RESET   4
+#define ACTION  6
+
+/******************************************
+*
+*  Level data
+*
+******************************************/
+
+static uint8_t level_0[] = {
+  4, 1, 1, 3, 1, 1, 3, 0,
+	2, 1, 1, 1, 1, 1, 1, 3,
+	0, 2, 1, 1, 1, 1, 1, 1,
+	0, 0, 2, 2, 2, 2, 1, 6,
+};
+
+static uint8_t level_1[] = {
+  4, 1, 3, 1, 3, 1, 1, 1,
+  2, 1, 1, 1, 1, 1, 1, 5,
+  0, 1, 1, 6, 1, 1, 2, 2,
+  0, 1, 2, 2, 1, 5, 0, 0
+};
+
+static uint8_t level_2[] = {
+  3, 1, 1, 1, 1, 1, 1, 4,
+  1, 1, 1, 2, 2, 2, 2, 2,
+  5, 1, 1, 1, 1, 1, 1, 1,
+  2, 5, 1, 1, 6, 1, 1, 5
+};
+
+static uint8_t level_3[] = {
+  1, 1, 1, 1, 3, 1, 1, 3,
+  4, 1, 6, 1, 1, 1, 1, 5,
+  2, 1, 2, 1, 1, 1, 2, 2,
+  0, 1, 0, 5, 1, 1, 0, 0
+};
+
+static uint8_t level_4[] = {
+  5, 1, 3, 0, 3, 1, 1, 4,
+  1, 1, 1, 3, 1, 1, 1, 2,
+  1, 1, 1, 1, 1, 1, 1, 0,
+  2, 2, 1, 6, 1, 5, 2, 0
+};
+
+static uint8_t level_5[] = {
+  4, 1, 1, 1, 1, 1, 1, 1,
+  2, 1, 1, 6, 1, 5, 1, 5,
+  0, 1, 1, 2, 1, 1, 1, 1,
+  0, 1, 1, 0, 1, 5, 1, 5
+};
+
+static uint8_t level_6[] = {
+  0, 3, 1, 5, 1, 1, 1, 4,
+  3, 1, 1, 1, 1, 1, 1, 2,
+  1, 1, 1, 5, 2, 1, 1, 0,
+  5, 5, 1, 6, 0, 1, 1, 0
+};
+
+static uint8_t level_7[] = {
+  3, 3, 1, 4, 1, 5, 3, 3,
+  5, 5, 1, 1, 1, 1, 5, 5,
+  1, 1, 1, 1, 1, 1, 1, 1,
+  2, 1, 1, 6, 1, 1, 1, 5
+};
+
+/******************************************
+*
+*  Level utilities
+*
+******************************************/
+
+// Get pointer to current level
+uint8_t* get_level() {
+  uint8_t* level_pointers[] = {
+    level_0, level_1, level_2, level_3,
+    level_4, level_5, level_6, level_7
+  };
+
+  return level_pointers[levelNo];
+}
+
+
+// Copy current level to level buffer
+void copy_level() {
+  uint8_t i = 0;
+  uint8_t* level = get_level();
+  do {
+    level_buffer[i] = level[i];
+    i++;
+  } while (i != 32);
+}
+
+
+// Get tile pointer at a given index
+uint8_t* get_tile(uint8_t tileIndex) {
+  uint8_t* tile_pointers[] = {
+    solid_tile, empty_tile, floor_tile, roof_tile, exit_tile, block_tile, left_tile, right_tile
+  };
+
+  return tile_pointers[tileIndex];
+}
+
+
+// Initialize player variables
+void spawn_player(uint8_t x, uint8_t y) {
+  direction = FACING_LEFT;
+  win = 0;
+  playerX = x >> 3;
+  playerY = y >> 3;
+}
+
+
+// Initialize block pusher level
+void init_level() {
+  copy_level();
+  Platform_ClearDisplay();
+  uint8_t sprite_x = 0;
+  uint8_t sprite_y = 0;
+  uint8_t tile_index = 0;
+
+  do {
+    uint8_t tileID = level_buffer[tile_index];
+    if (tileID == PLAYER_L)
+      spawn_player(sprite_x, sprite_y);
+    uint8_t* tilePointer = get_tile(tileID);
+    Platform_SetIndex(tilePointer);
+    Platform_DrawSprite(sprite_x, sprite_y, 8);
+    tile_index++;
+    sprite_x += 8;
+    if (sprite_x == 64) {
+      sprite_y += 8;
+      sprite_x = 0;
+    }
+  } while (sprite_y != 32);
+}
+
+
+// Get tile index in level buffer
+uint8_t* index_at(uint8_t x, uint8_t y) {
+  return &level_buffer[y*8 + x];
+}
+
+
+// Draw tile at location in level buffer to the display
+void draw_at(uint8_t x, uint8_t y) {
+  uint8_t* levelTilePtr = index_at(x, y);
+  uint8_t tileID = (*levelTilePtr);
+  uint8_t* tileSpritePtr = get_tile(tileID);
+  Platform_SetIndex(tileSpritePtr);
+  Platform_DrawSprite(x << 3, y << 3, 8);
+}
+
+
+// Set tile in level buffer to a given value
+void set_at(uint8_t x, uint8_t y, uint8_t value) {
+  draw_at(x, y);
+  uint8_t* tileIndex = index_at(x, y);
+  (*tileIndex) = value;
+  draw_at(x, y);
+}
+
+/******************************************
+*
+*  Block pusher player helpers
+*
+******************************************/
+
+static uint8_t deltaDir;
+
+// Draw the player at the player's position
+void draw_player() {
+  draw_at(playerX, playerY);
+}
+
+
+// Check if the player is carrying a block
+uint8_t carrying() {
+  if (playerY == 0)
+    return 0;
+  // BUG(?): If a player walks underneath a block, they will start
+  // to carry it even if they never chose to grab it.
+  return (*index_at(playerX, playerY-1)) == BLOCK;
+}
+
+/******************************************
+*
+*  Block pusher movement
+*
+******************************************/
+
+// Check if the stile at a given location is passable (an empty tile or an exit tile)
+uint8_t passable(uint8_t x, uint8_t y) {
+  uint8_t canPass = 0;
+  if (x > 7) return canPass;
+  if (y > 3) return canPass;
+  uint8_t* tileAddr = index_at(x, y);
+  if ((*tileAddr) == EMPTY) canPass = 1;
+  if ((*tileAddr) == EXIT) canPass = 1;
+
+  return canPass;
+}
+
+
+// Get the floor tile below the player's next potential position
+void fall_scan(uint8_t* x, uint8_t* y) {
+  uint8_t xPos = playerX+deltaDir;
+  uint8_t yPos = playerY;
+
+  while (true) {
+    yPos++;
+    if (!passable(xPos, yPos))
+      break;
+  }
+  yPos--;
+
+  (*x) = xPos;
+  (*y) = yPos;
+}
+
+
+// Move player to new location
+void move_player(uint8_t newX, uint8_t newY) {
+  uint8_t* tileAddr;
+
+  tileAddr = index_at(newX, newY);
+  if ((*tileAddr) == EXIT)
+    win = 1;
+
+  // Clear the player tile and sprite from the current player position
+  // then Update the player's position and draw the new player tile
+  draw_player();
+  tileAddr = index_at(playerX, playerY);
+  (*tileAddr) = EMPTY;
+  draw_player();
+  playerX = newX;
+  playerY = newY;
+  set_at(playerX, playerY, PLAYER_L+direction);
+}
+
+
+// Set the block tile above the player's head
+void set_block(uint8_t block) {
+  set_at(playerX, playerY-1, block);
+}
+
+
+// Set the the tile/block above the player's head to empty
+void hide_block() {
+  set_block(EMPTY);
+}
+
+
+// Set the tile above the player's head to a block tile
+void show_block() {
+  set_block(BLOCK);
+}
+
+
+// Move player one up and one over in the direction the player is facing
+void climb_move() {
+  move_player(playerX+deltaDir, playerY-1);
+}
+
+
+// Move while carrying block if the space is available
+void climb_carry() {
+  // Can't climb if blocked above-side
+  if (!passable(playerX+deltaDir, playerY-1))
+    return;
+
+  // Can't climb if blocked above-above-side
+  if (!passable(playerX+deltaDir, playerY-2))
+    return;
+
+  hide_block();
+  climb_move();
+  show_block();
+}
+
+
+// Climb if the space is available
+void climb() {
+  // Can't climb if blocked above
+  if (!passable(playerX, playerY-1))
+    return;
+
+
+  // Can't climb if blocked above-side
+  if (!passable(playerX+deltaDir, playerY-1))
+    return;
+
+  climb_move();
+}
+
+
+// Walk while carrying block if the space is available
+void carry() {
+  // Make sure we don't need to climb
+  if (!passable(playerX+deltaDir, playerY)) {
+    climb_carry();
+    return;
+  }
+
+  // Make sure there's horizontal space for the block
+  if (!passable(playerX+deltaDir, playerY-1))
+    return;
+
+  hide_block();
+
+  // Scan down and "fall"
+  uint8_t x, y;
+  fall_scan(&x, &y);
+  move_player(x, y);
+
+  show_block();
+}
+
+
+void walk() {
+  // Make sure we aren't carrying a block
+  if (carrying()) {
+    carry();
+    return;
+  }
+
+  // Make sure we don't need to climb
+  if (!passable(playerX+deltaDir, playerY)) {
+    climb();
+    return;
+  }
+
+  // Scan down and "fall"
+  uint8_t x, y;
+  fall_scan(&x, &y);
+  move_player(x, y);
+}
+
+
+// Walk one tile to the left or face left
+void walk_left() {
+  deltaDir = -1;
+  if (direction == FACING_LEFT) {
+    walk();
+    return;
+  }
+
+  // Face left
+  set_at(playerX, playerY, PLAYER_L);
+  direction = FACING_LEFT;
+}
+
+
+// Walk one tile to the right or face right
+void walk_right() {
+  deltaDir = 1;
+  if (direction == FACING_RIGHT) {
+    walk();
+    return;
+  }
+
+  // Face right
+  set_at(playerX, playerY, PLAYER_R);
+  direction = FACING_RIGHT;
+}
+
+
+// Drop the currently held block if the space is available
+void drop() {
+  if (!passable(playerX+deltaDir, playerY))
+    return;
+
+  // Clear tile above player
+  set_at(playerX, playerY-1, EMPTY);
+
+  // Set tile on first ground in front of player so the block "falls"
+  uint8_t x, y;
+  fall_scan(&x, &y);
+  set_at(x, y, BLOCK);
+}
+
+
+// Pick up or drop a block
+void action() {
+  // Set deltaDir based on facing direction
+  deltaDir = 1;
+  if (direction == FACING_LEFT)
+    deltaDir = -1;
+
+  // Try to drop the block if one is being carried
+  if (carrying()) {
+    drop();
+    return;
+  }
+
+  // If tile in front of player is not a block ...
+  uint8_t* tile = index_at(playerX+deltaDir, playerY);
+  if ((*tile) != BLOCK)
+    return;
+
+  // ... and tile above player is not empty ...
+  if ((*index_at(playerX, playerY-1)) != EMPTY)
+    return;
+
+  // ... then clear the block in front of player and make
+  // the space above player a block. This makes the player
+  // start "carrying" the block
+  set_at(playerX+deltaDir, playerY, EMPTY);
+  set_at(playerX, playerY-1, BLOCK);
+}
+
+/******************************************
+*
+*  Block pusher main routine
+*
+******************************************/
+
+static uint8_t puzzle_finished_count = 0;
+
+void block_puzzle() {
+  init_level();
+  do {
+    uint8_t input = Platform_WaitForKey();
+    if (input == RESET)   init_level();
+    if (input == MOVE_LT) walk_left();
+    if (input == MOVE_RT) walk_right();
+    if (input == ACTION)  action();
+  } while (!win);
+
+  Platform_SetBuzzer(32);
+  Platform_ClearDisplay();
+
+  puzzle_finished_count++;
+}
+
+/******************************************
+*
+*  Overworld
+*
+******************************************/
+
+static uint8_t rocks[4][4] = {
+  { 0x00, 0x40, 0x00, 0x00 },
+  { 0x00, 0x20, 0x40, 0x00 },
+  { 0x00, 0x40, 0x00, 0x00 },
+  { 0x00, 0x00, 0x00, 0x00 }
+};
+
+static uint8_t path[]   = { 0x60, 0xf0, 0xf0, 0x60 };
+static uint8_t man[]    = { 0x00, 0x60, 0x60, 0x00 };
+static uint8_t target[] = { 0x70, 0x40, 0xf0, 0x50 };
+
+// Positions of special objects on overworld boards
+static uint8_t special_pos[16][2] = {
+  {  3, 6 },
+  {  7, 4 },
+  { 14, 6 },
+  {  7, 4 },
+  {  3, 3 },
+  { 12, 4 },
+  {  7, 5 },
+  {  7, 4 },
+  {  7, 6 },
+  {  9, 4 },
+  { 10, 4 },
+  { 11, 3 },
+  {  5, 3 },
+  {  5, 3 },
+  {  5, 3 },
+  {  5, 3 }
+};
+
+static uint8_t board_n[] = { // Next board if moving north (indexed by current board)
+  0x0, 0x2, 0x1, 0x5, 0xA, 0x6, 0x7, 0x7, 0x8, 0x9, 0x3, 0xC, 0xC, 0xC, 0xC, 0xE
+};
+
+static uint8_t board_e[] = { // Next board if moving east (indexed by current board)
+  0x3, 0x4, 0x2, 0x1, 0x9, 0x8, 0x6, 0x7, 0xA, 0x9, 0xA, 0xB, 0xD, 0xE, 0xF, 0xD
+};
+
+static uint8_t board_s[] = { // Next board if moving south (indexed by current board)
+  0x0, 0x2, 0x1, 0xA, 0xD, 0x3, 0x5, 0x6, 0x8, 0x9, 0x4, 0xB, 0xB, 0xB, 0xB, 0xB
+};
+
+static uint8_t board_w[] = { // Next board if moving west (indexed by current board)
+  0x0, 0x3, 0x2, 0x0, 0x1, 0x5, 0x6, 0x7, 0x5, 0x4, 0x8, 0xB, 0xD, 0xD, 0x3, 0xF
+};
+
+// --- Boards --- //
+
+static uint8_t board0[] = {
+  0x28, 0xEB, 0x0A, 0x7A, 0x02, 0xEF, 0x28, 0x2A,
+  0x6A, 0x4A, 0x5A, 0x42, 0x7A, 0x0A, 0x6E, 0x28
+};
+
+static uint8_t board1[] = {
+  0x08, 0x08, 0x4A, 0x08, 0xFF, 0x40, 0x5E, 0x52,
+  0x42, 0x7E, 0x40, 0xCF, 0x08, 0x4A, 0x08, 0x08
+};
+
+static uint8_t board2[] = {
+  0x00, 0x70, 0x50, 0x50, 0xD7, 0x54, 0x54, 0x54,
+  0x54, 0x54, 0x54, 0xD5, 0x14, 0x14, 0x7C, 0x00
+};
+
+static uint8_t board3[] = {
+  0x28, 0x28, 0x28, 0xEB, 0x0A, 0x6A, 0x0A, 0x3A,
+  0x22, 0x3A, 0x2A, 0x2E, 0x20, 0x38, 0x08, 0x28
+};
+
+static uint8_t board4[] = {
+  0x08, 0x08, 0x1C, 0x7F, 0x5C, 0xC9, 0x08, 0x1C,
+  0x60, 0x1C, 0x08, 0x08, 0x1C, 0x60, 0x1C, 0x08
+};
+
+static uint8_t board5[] = {
+  0x10, 0x00, 0x03, 0xF3, 0x10, 0x10, 0x10, 0xDF,
+  0xD0, 0x16, 0x16, 0x10, 0x10, 0x10, 0x10, 0x10
+};
+
+static uint8_t board6[] = {
+  0x00, 0x02, 0x4A, 0x66, 0x70, 0x78, 0x7C, 0xFF,
+  0x7C, 0x78, 0x70, 0x66, 0x4A, 0x02, 0x00, 0x00
+};
+
+static uint8_t board7[] = {
+  0x00, 0x76, 0x52, 0x5A, 0x04, 0x00, 0x39, 0xFB,
+  0x39, 0x00, 0x04, 0x5A, 0x52, 0x76, 0x00, 0x00
+};
+
+static uint8_t board8[] = {
+  0x10, 0x7E, 0x08, 0x7E, 0x10, 0x7E, 0x08, 0x7E,
+  0x10, 0x7E, 0x08, 0x7E, 0x10, 0x7E, 0x10, 0x10
+};
+
+static uint8_t board9[] = {
+  0x08, 0x08, 0xD8, 0x52, 0xD0, 0x10, 0x38, 0x2B,
+  0x3A, 0x12, 0x02, 0xC2, 0x4E, 0x78, 0x10, 0x18
+};
+
+static uint8_t boardA[] = {
+  0x10, 0x54, 0x10, 0xFF, 0x04, 0x7C, 0x40, 0x7C,
+  0x04, 0x1C, 0x10, 0x00, 0x28, 0x6C, 0x74, 0x38
+};
+
+static uint8_t boardB[] = {
+  0x00, 0xF2, 0xEA, 0x02, 0x02, 0xC3, 0x0A, 0xFA,
+  0x02, 0xFA, 0xA2, 0x8A, 0x22, 0xF2, 0x9A, 0x38
+};
+
+static uint8_t boardC[] = {
+  0x08, 0x08, 0x08, 0x3E, 0x22, 0xFB, 0x22, 0x3E,
+  0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08
+};
+
+static uint8_t boardD[] = {
+  0x08, 0x08, 0x08, 0x3E, 0x22, 0xFB, 0x22, 0x3E,
+  0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x0A, 0x08
+};
+
+static uint8_t boardE[] = {
+  0x08, 0x08, 0x08, 0x3E, 0x22, 0xFB, 0x22, 0x3E,
+  0x08, 0x08, 0x08, 0x08, 0x0A, 0x08, 0x0A, 0x08
+};
+
+static uint8_t boardF[] = {
+  0x08, 0x08, 0x08, 0x3E, 0x22, 0xFB, 0x22, 0x3E,
+  0x08, 0x08, 0x0A, 0x08, 0x0A, 0x08, 0x0A, 0x08
+};
+
+static uint8_t* boards[] = {
+  board0, board1, board2, board3,
+  board4, board5, board6, board7,
+  board8, board9, boardA, boardB,
+  boardC, boardD, boardE, boardF
+};
+
+// Board 4 has two gates that are updated when certain special
+// events are triggered (you hear a rumble in the distance)
+static uint8_t* gate1 = &board4[0x8];
+static uint8_t* gate2 = &board4[0xd];
+
+/******************************************
+*
+*  Overworld game logic
+*
+******************************************/
+
+// Overworld variables
+static uint8_t boardNo;
+static uint8_t manX;
+static uint8_t manY;
+static uint8_t specialX;
+static uint8_t specialY;
+static uint8_t oldX;
+static uint8_t oldY;
+static uint8_t specialFlag;
+
+// Set the column data to the secret wall data if it's the correct offset and board
+uint8_t secret_wall(uint8_t data, uint8_t data_offset) {
+  if (boardNo != 6) return data;
+  if (data_offset != 7) return data;
+  return 0b11111100;
+}
+
+
+// Draw the current overworld board to the display
+void draw_board() {
+  Platform_ClearDisplay();
+
+  uint8_t x_tile = 0;
+  uint8_t data_offset = 0;
+  uint8_t* data_base = boards[boardNo];
+
+  do {
+    uint8_t column = data_base[data_offset];
+    uint8_t y_tile = 0;
+    column = secret_wall(column, data_offset);
+
+    do {
+      uint8_t* tile = rocks[Platform_Random(0b11)]; // Generate random rocks on non-passable tiles
+      if (column & 1)
+        tile = path;
+      column >>= 1;
+      Platform_SetIndex(tile);
+      Platform_DrawSprite(x_tile, y_tile, 4);
+      y_tile += 4;
+    } while (y_tile != 32);
+
+    x_tile += 4;
+    data_offset++;
+  } while (data_offset != 16);
+
+  // Update coordinates to special tile if such
+  // a tile is present or not collected
+  specialX = -1;
+  specialY = -1;
+  if (special_complete[boardNo] != 0)
+    return;
+  specialX = special_pos[boardNo][0];
+  specialY = special_pos[boardNo][1];
+
+  uint8_t specialDrawX = specialX << 2;
+  uint8_t specialDrawY = specialY << 2;
+
+  // Clear old path and draw special tile
+  Platform_SetIndex(path);
+  Platform_DrawSprite(specialDrawX, specialDrawY, 4);
+  Platform_SetIndex(target);
+  Platform_DrawSprite(specialDrawX, specialDrawY, 4);
+}
+
+
+// Draw overworld player to the display
+void draw_man(uint8_t x, uint8_t y) {
+  Platform_SetIndex(man);
+  Platform_DrawSprite(x << 2, y << 2, 4);
+}
+
+
+// Try to move to a certain position if possible
+uint8_t try_move() {
+  uint8_t* board = boards[boardNo];
+
+  uint8_t column = board[manX & 15];
+  uint8_t mask_y = column & (1 << (manY & 7));
+
+  if (mask_y != 0) {
+    if (manX == specialX && manY == specialY)
+      specialFlag = 1;
+    return 1;
+  }
+
+  // Roll back
+  manX = oldX;
+  manY = oldY;
+  return 0;
+}
+
+
+// Maybe update board to new board
+void change_board(uint8_t* next_board) {
+  uint8_t next_board_index = next_board[boardNo];
+  if (next_board_index == boardNo)
+    return;
+  boardNo = next_board_index;
+  draw_board();
+}
+
+
+// Try to walk one tile to the left and maybe change board
+void overworld_walk_w() {
+  manX--;
+  if (!try_move())
+    return;
+  if (manX != 0xff)
+    return;
+  manX = 15;
+  change_board(board_w);
+}
+
+
+// Try to walk one tile to the right and maybe change board
+void overworld_walk_e() {
+  manX++;
+  if (!try_move())
+    return;
+  if (manX != 16)
+    return;
+  manX = 0;
+  change_board(board_e);
+}
+
+
+// Try to walk one tile up and maybe change board
+void overworld_walk_n() {
+  manY--;
+  if (!try_move())
+    return;
+  if (manY != 0xff)
+    return;
+  manY = 7;
+  change_board(board_n);
+}
+
+
+// Try to walk one tile down and maybe change board
+void overworld_walk_s() {
+  manY += 1;
+  if (try_move() == 0)
+    return;
+  if (manY != 8)
+    return;
+  manY = 0;
+  change_board(board_s);
+}
+
+
+// Try to walk one tile in a specified
+// direction and maybe change board
+void overworld_walk(uint8_t key) {
+  if (key == 7) overworld_walk_w();
+  if (key == 9) overworld_walk_e();
+  if (key == 5) overworld_walk_n();
+  if (key == 8) overworld_walk_s();
+}
+
+/******************************************
+*
+*  Special scripted events
+*
+******************************************/
+
+// Set given gate to open and display rumble text
+void rumble(uint8_t* gate) {
+  (*gate) = 0b00001100;
+  Platform_ClearDisplay();
+  draw_text(rumbletext, 36);
+  Platform_WaitForKey();
+}
+
+
+// Open gate 1 and display rumble text
+void open_gate_1() {
+  rumble(gate1);
+}
+
+
+// Open gate 2 and display rumble text
+void open_gate_2() {
+  rumble(gate2);
+}
+
+
+// Display useless gold text
+void useless_gold() {
+  Platform_ClearDisplay();
+  draw_text(uselesstext, 32);
+  Platform_WaitForKey();
+}
+
+
+// Display pyramid hint text
+void pyramid_hint() {
+  Platform_ClearDisplay();
+  draw_text(pyramidtext, 36);
+  Platform_WaitForKey();
+}
+
+
+// Display gross skull text
+void gross_skull() {
+  Platform_ClearDisplay();
+  draw_text(skulltext, 36);
+  Platform_WaitForKey();
+}
+
+
+// Display dead end text
+void dead_end() {
+  Platform_ClearDisplay();
+  draw_text(deadendtext, 17);
+  Platform_WaitForKey();
+}
+
+
+// Display maze hint text
+void maze_hint() {
+  Platform_ClearDisplay();
+  draw_text(mazetext, 5);
+  Platform_WaitForKey();
+}
+
+
+// Start a block puzzle
+void puzzle_0() { levelNo = 0; block_puzzle(); }
+void puzzle_1() { levelNo = 1; block_puzzle(); }
+void puzzle_2() { levelNo = 2; block_puzzle(); }
+void puzzle_3() { levelNo = 3; block_puzzle(); }
+void puzzle_4() { levelNo = 4; block_puzzle(); }
+void puzzle_5() { levelNo = 5; block_puzzle(); }
+void puzzle_6() { levelNo = 6; block_puzzle(); }
+
+// Start block puzzle 7, display the exit text,
+// display the game completion image, and infinite loop
+void puzzle_7() {
+  levelNo = 7;
+  block_puzzle();
+
+  Platform_ClearDisplay();
+  draw_text(exittext, 44);
+  Platform_WaitForKey();
+
+  draw_bitmap(bus);
+
+  // The End!
+  while (true)
+    Platform_WaitForKey();
+}
+
+
+// If all puzzles are complete, show the text for
+// where to go next, and open up the final puzzle
+void check_puzzles() {
+  if (puzzle_finished_count != 7)
+    return;
+  puzzle_finished_count++;
+
+  Platform_ClearDisplay();
+  draw_text(puzzlestext, 45);
+  Platform_WaitForKey();
+
+  board_e[0] = 0; // Make final puzzle reachable
+}
+
+/******************************************
+*
+*  Overworld main routine
+*
+******************************************/
+
+// Perform special event depending on which
+// screen the player is on
+void do_special() {
+  special_complete[boardNo] = 1;
+
+  switch (boardNo) {
+  case 0x0: puzzle_7();     break;
+  case 0x1: useless_gold(); break;
+  case 0x2: puzzle_1();     break;
+  case 0x3: puzzle_0();     break;
+  case 0x4: open_gate_2();  break;
+  case 0x5: gross_skull();  break;
+  case 0x6: puzzle_2();     break;
+  case 0x7: open_gate_1();  break;
+  case 0x8: puzzle_3();     break;
+  case 0x9: puzzle_6();     break;
+  case 0xa: dead_end();     break;
+  case 0xb:                 break;
+  case 0xc: pyramid_hint(); break;
+  case 0xd: puzzle_4();     break;
+  case 0xe: maze_hint();    break;
+  case 0xf: puzzle_5();     break;
+  }
+}
+
+
+// Main game entry point
+void entry() {
+#ifndef DEBUG_SKIPINTRO
+  // First phase of intro cutscene
+  draw_bitmap(title1);
+  draw_phase_1();
+  wait_delay();
+
+  // Second phase of intro cutscene
+  draw_phase_1();
+  swapmouth();
+  draw_phase_2();
+  wait_delay();
+
+  // Third phase of intro cutscene
+  draw_phase_2();
+  swapmouth();
+  draw_phase_3();
+  wait_delay();
+
+  // Game title card
+  draw_phase_3();
+  draw_bitmap(title2);
+  Platform_WaitForKey();
+#endif // DEBUG_SKIPINTRO
+
+#ifdef DEBUG_FINALPUZZLE
+  board_e[0] = 0; // Make final puzzle reachable
+#endif // DEBUG_FINALPUZZLE
+
+  // Main routine
+  manX = 10;
+  manY = 4;
+  draw_board();
+  while(true) {
+    draw_man(manX, manY);
+    uint8_t key = Platform_WaitForKey();
+    draw_man(manX, manY);
+    oldX = manX;
+    oldY = manY;
+    specialFlag = 0;
+    overworld_walk(key);
+    if (specialFlag != 0)
+      do_special();
+    check_puzzles();
+    if (specialFlag != 0)
+      draw_board();
+  }
+}
