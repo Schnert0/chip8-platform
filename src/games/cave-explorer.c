@@ -16,7 +16,7 @@
 // #define DEBUG_SKIPINTRO   // Uncomment to skip the intro and title screen
 // #define DEBUG_FINALPUZZLE // Uncomment to make final puzzle accessable at the beginning
 
-#include "chip8_platform.h" // Used to simulate Chip8 environment
+#include "../chip8_platform/chip8_platform.h" // Used to simulate Chip8 environment
 
 static uint8_t font[] = { // Text block
   0x20, 0x20, 0x20, 0x00, 0x20, 0xF0, 0x10, 0x70, 0x00, 0x40, 0xE0, 0x90, 0xE0, 0x90, 0x90, 0x90,
